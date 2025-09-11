@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <title>小测试</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin: 40px; background: #f4f6f9; }
+    h1 { color: #333; }
+    .card { border: 1px solid #ccc; padding: 20px; margin: 20px auto; width: 90%; max-width: 860px;
+            border-radius: 12px; background: #fff; box-shadow: 0 4px 10px rgba(0,0,0,.08); }
+    .word-block { display: inline-block; margin: 5px; }
+    .word-input { width: 120px; padding: 8px; font-size: 18px; text-align: center;
+                  border: 1px solid #d0d7de; border-radius: 6px; margin: 3px; }
+    .word-input:focus { box-shadow: 0 0 0 3px rgba(51,136,255,.18); border-color: #3388ff; }
+    .correct { background: #c8f7c5; border: 1px solid #4caf50 !important; }
+    .wrong { background: #f8d7da; border: 1px solid #f44336 !important; color: #b00020; font-weight: bold; }
+    .answer-box { margin-top: 16px; padding: 18px; border-radius: 10px; background: #eef3fc;
+                  box-shadow: inset 0 0 6px rgba(0,0,0,0.06); }
+    .ru { font-size: 22px; font-weight: 700; color: #003366; }
+    .phon, .pos, .cn { font-size: 18px; color: #333; margin-top: 6px; }
+    .muted { color: #777; font-size: 14px; margin-top: 10px; }
+    .pill { display:inline-block; padding: 3px 10px; border-radius: 999px; background:#f0f3f7; color:#4a5568; font-size:12px; margin:0 4px;}
+    .tip { color:#888; font-size:14px; }
+    .controls { margin-top: 12px; }
+    .btn { padding:6px 14px; margin:0 6px; border:1px solid #aaa; border-radius:6px; background:#f0f3f7; cursor:pointer; }
+    .btn:hover { background:#e4e8ed; }
+  </style>
+</head>
+<body>
+  <h1>📖 小测试</h1>
+  <p class="tip">逐词输入 → 输入完全部单词后统一判定<br>
+  正确=绿色，错误=红色<br>
+  空格/回车=显示答案/进入下一题</p>
+
+  <div id="card" class="card">
+    <div id="cn" style="font-size:18px; margin-bottom:8px;"></div>
+    <div id="inputs"></div>
+    <div id="status" class="muted"></div>
+    <div class="controls">
+      <button class="btn" onclick="toggleSpeak()">🔊 暂停/继续朗读</button>
+    </div>
+  </div>
+
+  <div id="answer" class="answer-box" style="display:none;">
+    <div id="ru" class="ru"></div>
+    <div id="phon" class="phon"></div>
+    <div id="pos" class="pos"></div>
+    <div id="cnAnswer" class="cn"></div>
+  </div>
+
+  <script>
+  // ====== 数据 ======
+  const cards = [
+    {
+      cn: "重要的是，专用底盘的使用允许在公共道路上行驶，无需许可和额外费用，轴荷为9+15吨。",
+      ru: "Важно, что применение спецшасси позволяет передвигаться по дорогам общего пользования без разрешительных документов и доплат – нагрузки на оси составляют 9,0 + 15,0 т.",
+      parts: [
+        { ru: "Важно", cn: "重要", pos: "наречие", phon: "Ва́жно" },
+        { ru: "что применение спецшасси", cn: "专用底盘的使用", pos: "сущ. + прил.", phon: "что примене́ние спе́цшасси" },
+        { ru: "позволяет передвигаться", cn: "允许移动", pos: "глагол", phon: "позволя́ет передвига́ться" },
+        { ru: "по дорогам общего пользования", cn: "在公共道路上", pos: "сущ. + прил.", phon: "по доро́гам о́бщего по́льзования" },
+        { ru: "без разрешительных документов и доплат", cn: "无需许可和额外费用", pos: "сущ. + прил.", phon: "без разреши́тельных докуме́нтов и допла́т" },
+        { ru: "нагрузки на оси составляют 9,0 + 15,0 т.", cn: "轴荷为9+15吨", pos: "сущ. + числ.", phon: "нагру́зки на о́си составля́ют" },
+        { ru: "Важно, что применение спецшасси позволяет передвигаться по дорогам общего пользования без разрешительных документов и доплат – нагрузки на оси составляют 9,0 + 15,0 т.", cn: "整句", pos: "предложение", phon: "Ва́жно, что примене́ние спе́цшасси позволя́ет..." }
+      ]
+    }
+  ];
+
+  let currentCard = 0;
+  let currentPart = 0;
+  let showingAnswer = false;
+
+  // ====== 打字机音效 ======
+  let audioCtx;
+  function ensureAudioCtx() {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC();
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }
+  function typewriterClick() {
+    ensureAudioCtx();
+    const now = audioCtx.currentTime;
+    const noiseDur = 0.03;
+    const noiseBuffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * noiseDur), audioCtx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random()*2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 0.004));
+    const noiseSrc = audioCtx.createBufferSource();
+    noiseSrc.buffer = noiseBuffer;
+    const bp = audioCtx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 3500; bp.Q.value = 6;
+    const noiseGain = audioCtx.createGain();
+    noiseGain.gain.setValueAtTime(0.25, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + noiseDur);
+    noiseSrc.connect(bp).connect(noiseGain).connect(audioCtx.destination);
+    noiseSrc.start(now); noiseSrc.stop(now + noiseDur);
+  }
+
+  // ====== 工具 ======
+  function normalize(str) {
+    return str.toLowerCase().replace(/[.,!?;:—–…«»"()]/g, "").replace(/\s+/g, " ").trim();
+  }
+
+  // ====== 俄语朗读 ======
+  let speaking = false;
+  let loopTimer = null;
+  function speak(text) {
+    stopSpeak();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "ru-RU";
+    u.rate = 0.75;
+    u.onend = () => { if (speaking) loopTimer = setTimeout(() => speak(text), 800); };
+    speechSynthesis.speak(u);
+  }
+  function stopSpeak() { clearTimeout(loopTimer); speechSynthesis.cancel(); }
+  function toggleSpeak() {
+    if (speaking) { speaking = false; stopSpeak(); }
+    else { speaking = true; speak(cards[currentCard].parts[currentPart].ru); }
+  }
+
+  // ====== 渲染 ======
+  function renderPart() {
+    const part = cards[currentCard].parts[currentPart];
+    document.getElementById('cn').innerText = "中文提示： " + part.cn;
+    const inputsDiv = document.getElementById('inputs');
+    inputsDiv.innerHTML = "";
+    document.getElementById('status').textContent = `目标：${part.pos}`;
+    document.getElementById('answer').style.display = "none";
+    showingAnswer = false;
+
+    const tokens = part.ru.split(" ");
+    tokens.forEach(tok => {
+      const block = document.createElement("div");
+      block.className = "word-block";
+      const inp = document.createElement("input");
+      inp.type = "text"; inp.className = "word-input"; inp.dataset.correct = tok;
+      inp.addEventListener("keydown", e => { if (e.key.length===1 || e.key==="Backspace"||e.key===" ") typewriterClick(); });
+      block.appendChild(inp);
+      inputsDiv.appendChild(block);
+    });
+
+    speaking = true; speak(part.ru);
+    inputsDiv.querySelector("input").focus();
+  }
+
+  // ====== 判定 ======
+  function checkSentence() {
+    const inputs = document.querySelectorAll(".word-input");
+    let allCorrect = true;
+    inputs.forEach(inp => {
+      const val = normalize(inp.value);
+      const correct = normalize(inp.dataset.correct);
+      inp.classList.remove("correct","wrong");
+      if (val === correct) inp.classList.add("correct");
+      else { inp.classList.add("wrong"); allCorrect = false; }
+    });
+    return allCorrect;
+  }
+
+  // ====== 答案页 ======
+  function showAnswer() {
+    const part = cards[currentCard].parts[currentPart];
+    checkSentence(); // 判定并高亮
+    document.getElementById('ru').textContent   = part.ru;
+    document.getElementById('phon').textContent = "重音：" + part.phon;
+    document.getElementById('pos').textContent  = "词性：" + part.pos;
+    document.getElementById('cnAnswer').textContent = "中文：" + part.cn;
+    document.getElementById('answer').style.display = "block";
+    showingAnswer = true;
+  }
+
+  function nextPage() {
+    currentPart++;
+    if (currentPart >= cards[currentCard].parts.length) {
+      currentCard = (currentCard+1) % cards.length;
+      currentPart = 0;
+    }
+    renderPart();
+  }
+
+  // ====== 键盘切换 ======
+  document.addEventListener("keydown", e => {
+    if ((e.key===" " || e.key==="Enter")) {
+      e.preventDefault();
+      if (!showingAnswer) showAnswer();
+      else nextPage();
+    }
+  });
+
+  renderPart();
+  </script>
+</body>
+</html>
