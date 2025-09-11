@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <title>小测试</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin: 40px; background: #f4f6f9; }
+    h1 { color: #333; }
+    .card { border: 1px solid #ccc; padding: 20px; margin: 20px auto; width: 90%; max-width: 860px;
+            border-radius: 12px; background: #fff; box-shadow: 0 4px 10px rgba(0,0,0,.08); }
+    .word-input { width: 90%; max-width: 700px; padding: 12px 14px; font-size: 20px; text-align: center;
+                  margin: 12px auto; border-radius: 8px; border: 1px solid #d0d7de; outline: none; }
+    .word-input:focus { box-shadow: 0 0 0 3px rgba(51,136,255,.18); border-color: #3388ff; }
+    .correct { background: #c8f7c5; border: 1px solid #4caf50 !important; }
+    .wrong { background: #f8d7da; border: 1px solid #f44336 !important; }
+    .answer-box { margin-top: 16px; padding: 18px; border-radius: 10px; background: #eef3fc;
+                  box-shadow: inset 0 0 6px rgba(0,0,0,0.06); }
+    .ru { font-size: 22px; font-weight: 700; color: #003366; }
+    .phon, .pos, .cn { font-size: 18px; color: #333; margin-top: 6px; }
+    .muted { color: #777; font-size: 14px; margin-top: 10px; }
+    .pill { display:inline-block; padding: 3px 10px; border-radius: 999px; background:#f0f3f7; color:#4a5568; font-size:12px; margin:0 4px;}
+    .tip { color:#888; font-size:14px; }
+    .controls { margin-top: 12px; }
+    .btn { padding:6px 14px; margin:0 6px; border:1px solid #aaa; border-radius:6px; background:#f0f3f7; cursor:pointer; }
+    .btn:hover { background:#e4e8ed; }
+  </style>
+</head>
+<body>
+  <h1>📖 小测试</h1>
+  <p class="tip">根据中文提示输入对应的俄语 <span class="pill">在输入框里空格=输入空格</span> <span class="pill">整段正确后 空格/回车=答案/下一题</span></p>
+
+  <div id="card" class="card">
+    <div id="cn" style="font-size:18px; margin-bottom:8px;"></div>
+    <input id="wordInput" type="text" class="word-input" placeholder="输入俄语词 / 词组 / 句子…" autocomplete="off" />
+    <div id="status" class="muted"></div>
+    <div class="controls">
+      <button class="btn" onclick="toggleSpeak()">🔊 暂停/继续朗读</button>
+    </div>
+  </div>
+
+  <div id="answer" class="answer-box" style="display:none;">
+    <div id="ru" class="ru"></div>
+    <div id="phon" class="phon"></div>
+    <div id="pos" class="pos"></div>
+    <div id="cnAnswer" class="cn"></div>
+  </div>
+
+  <script>
+  // ====== 数据 ======
+  const cards = [
+    {
+      cn: "欢迎您来我们公司！",
+      ru: "Мы рады приветствовать вас в нашей компании!",
+      parts: [
+        { ru: "Мы", cn: "我们", pos: "代词",   phon: "Мы" },
+        { ru: "рады", cn: "高兴", pos: "形容词", phon: "ра́ды" },
+        { ru: "приветствовать вас", cn: "欢迎您", pos: "动词词组", phon: "приве́тствовать вас" },
+        { ru: "в нашей компании", cn: "在我们公司", pos: "介词短语", phon: "в на́шей компанИи" },
+        { ru: "Мы рады приветствовать вас в нашей компании", cn: "欢迎您来我们公司", pos: "完整句子", phon: "Мы ра́ды приве́тствовать вас ф на́шу кампанИю!" }
+      ]
+    }
+  ];
+
+  let currentCard = 0;
+  let currentPart = 0;
+  let showingAnswer = false;
+
+  // ====== 打字机音效 ======
+  const keyAudio = new Audio("https://actions.google.com/sounds/v1/office/typewriter.ogg");
+  keyAudio.volume = 0.5; // 可以调音量
+
+  function clickSound() {
+    keyAudio.currentTime = 0;  // 每次从头播放
+    keyAudio.play();
+  }
+
+  // ====== 工具 ======
+  function normalize(str) {
+    return str
+      .toLowerCase()
+      .replace(/[.,!?;:—–…«»"()]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  function expected() { return cards[currentCard].parts[currentPart].ru; }
+  function isCompleteInput() {
+    const val = document.getElementById('wordInput').value;
+    return normalize(val) === normalize(expected());
+  }
+
+  // ====== 俄语朗读 ======
+  let speaking = false;
+  let loopTimer = null;
+  function speak(text) {
+    stopSpeak();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "ru-RU";
+    u.rate = 0.75;
+    u.onend = () => {
+      if (speaking) loopTimer = setTimeout(() => speak(text), 1000);
+    };
+    speechSynthesis.speak(u);
+  }
+  function stopSpeak() {
+    clearTimeout(loopTimer);
+    speechSynthesis.cancel();
+  }
+  function toggleSpeak() {
+    if (speaking) { speaking = false; stopSpeak(); }
+    else { speaking = true; speak(expected()); }
+  }
+
+  // ====== 渲染 ======
+  function renderPart() {
+    const part = cards[currentCard].parts[currentPart];
+    document.getElementById('cn').innerText = "中文提示： " + part.cn;
+    const inp = document.getElementById('wordInput');
+    const status = document.getElementById('status');
+    const answerBox = document.getElementById('answer');
+
+    inp.value = "";
+    inp.classList.remove('correct','wrong');
+    answerBox.style.display = "none";
+    showingAnswer = false;
+    status.textContent = `目标：${part.pos}`;
+
+    inp.focus();
+    let lastLen = 0;
+    inp.onkeydown = (e) => {
+      if (e.key.length === 1 || e.key === 'Backspace' || e.key === ' ') clickSound();
+    };
+    inp.oninput = (e) => {
+      if (e.target.value.length > lastLen) clickSound();
+      lastLen = e.target.value.length;
+    };
+
+    speaking = true;
+    speak(part.ru);
+  }
+
+  // ====== 答案页 ======
+  function showAnswer() {
+    const part = cards[currentCard].parts[currentPart];
+    const inp = document.getElementById('wordInput');
+    const answerBox = document.getElementById('answer');
+
+    inp.classList.remove('correct','wrong');
+    if (isCompleteInput()) inp.classList.add('correct');
+    else inp.classList.add('wrong');
+
+    document.getElementById('ru').textContent   = part.ru;
+    document.getElementById('phon').textContent = "重音：" + part.phon;
+    document.getElementById('pos').textContent  = "词性：" + part.pos;
+    document.getElementById('cnAnswer').textContent = "中文：" + part.cn;
+
+    answerBox.style.display = "block";
+    showingAnswer = true;
+  }
+
+  function nextPage() {
+    currentPart++;
+    if (currentPart >= cards[currentCard].parts.length) currentPart = 0;
+    renderPart();
+  }
+
+  // ====== 全局键盘：空格/回车 ======
+  document.addEventListener('keydown', (e) => {
+    const inp = document.getElementById('wordInput');
+    if (!inp) return;
+    const targetIsInput = document.activeElement === inp;
+
+    if (e.key === ' ' || e.key === 'Enter') {
+      const complete = isCompleteInput();
+
+      if (targetIsInput && !complete) {
+        if (e.key === ' ') return;
+        if (e.key === 'Enter') { e.preventDefault(); return; }
+      }
+
+      e.preventDefault();
+      if (!showingAnswer) showAnswer(); else nextPage();
+    }
+  });
+
+  // ====== 初始化 ======
+  renderPart();
+  </script>
+</body>
+</html>
