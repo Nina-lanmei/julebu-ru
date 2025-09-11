@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <title>小测试</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin: 40px; background: #f4f6f9; }
+    h1 { color: #333; }
+    .card { border: 1px solid #ccc; padding: 20px; margin: 20px auto; width: 90%; max-width: 960px;
+            border-radius: 12px; background: #fff; box-shadow: 0 4px 10px rgba(0,0,0,.08); }
+    .word-row { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
+    .word-input { width: 140px; padding: 8px; font-size: 18px; text-align: center;
+                  border: 1px solid #d0d7de; border-radius: 6px; }
+    .word-input:focus { box-shadow: 0 0 0 3px rgba(51,136,255,.18); border-color: #3388ff; }
+    .correct { background: #c8f7c5; border: 1px solid #4caf50 !important; }
+    .wrong { background: #f8d7da; border: 1px solid #f44336 !important; color: #b00020; font-weight: bold; }
+    .answer-box { margin-top: 16px; padding: 18px; border-radius: 10px; background: #eef3fc;
+                  box-shadow: inset 0 0 6px rgba(0,0,0,0.06); }
+    .ru { font-size: 22px; font-weight: 700; color: #003366; }
+    .phon, .pos, .cn { font-size: 18px; color: #333; margin-top: 6px; }
+    .btn { padding:6px 14px; margin:0 6px; border:1px solid #aaa; border-radius:6px; background:#f0f3f7; cursor:pointer; }
+    .btn:hover { background:#e4e8ed; }
+  </style>
+</head>
+<body>
+  <h1>📖 小测试</h1>
+  <p>逐词输入 → 正确=绿色，错误=红色。<br>
+     填完最后一个单词后 → 显示答案，再按一次空格/回车 → 下一页。<br>
+     📱 手机用户请先点一次 🔊 按钮解锁语音。</p>
+
+  <div id="card" class="card">
+    <div id="cn" style="font-size:18px; margin-bottom:12px;"></div>
+    <div id="inputs" class="word-row"></div>
+    <div class="controls">
+      <button class="btn" onclick="toggleSpeak()">🔊 暂停/继续朗读</button>
+    </div>
+  </div>
+
+  <div id="answer" class="answer-box" style="display:none;">
+    <div id="ru" class="ru"></div>
+    <div id="phon" class="phon"></div>
+    <div id="pos" class="pos"></div>
+    <div id="cnAnswer" class="cn"></div>
+  </div>
+
+  <script>
+  // ====== 原始数据（完整）======
+  const cards = [
+    {
+      cn: "重要的是，专用底盘的使用允许在公共道路上行驶，无需许可和额外费用，轴荷为9+15吨。",
+      ru: "Важно, что применение спецшасси позволяет передвигаться по дорогам общего пользования без разрешительных документов и доплат – нагрузки на оси составляют 9,0 + 15,0 т.",
+      parts: [
+        { ru: "Важно", cn: "重要", pos: "наречие", phon: "Ва́жно" },
+        { ru: "что применение спецшасси", cn: "专用底盘的使用", pos: "сущ. + прил.", phon: "что примене́ние спе́цшасси" },
+        { ru: "позволяет передвигаться", cn: "允许移动", pos: "глагол", phon: "позволя́ет передвига́ться" },
+        { ru: "по дорогам общего пользования", cn: "在公共道路上", pos: "сущ. + прил.", phon: "по доро́гам о́бщего по́льзования" },
+        { ru: "без разрешительных документов и доплат", cn: "无需许可和额外费用", pos: "сущ. + прил.", phon: "без разреши́тельных докуме́нтов и допла́т" },
+        { ru: "нагрузки на оси составляют 9,0 + 15,0 т.", cn: "轴荷为9+15吨", pos: "сущ. + числ.", phon: "нагру́зки на о́си составля́ют" },
+        { ru: "整句", cn: "整句", pos: "предложение", phon: "Ва́жно, что примене́ние спе́цшасси позволя́ет..." }
+      ]
+    },
+    {
+      cn: "在专门准备的场地上，起重机可以带全套配重移动。",
+      ru: "По специально подготовленным площадкам кран может перемещаться с полным пакетом дополнительных противовесов.",
+      parts: [
+        { ru: "По специально подготовленным площадкам", cn: "在专门准备的场地上", pos: "сущ. + прил.", phon: "По специа́льно подгото́вленным площадка́м" },
+        { ru: "кран может перемещаться", cn: "起重机可以移动", pos: "глагол", phon: "кран мо́жет перемеща́ться" },
+        { ru: "с полным пакетом дополнительных противовесов", cn: "带全套配重", pos: "сущ. + прил.", phon: "с по́лным паке́том дополнИтельных противове́сов" },
+        { ru: "整句", cn: "整句", pos: "предложение", phon: "По специа́льно подгото́вленным ..." }
+      ]
+    }
+  ];
+
+  let currentCard = 0;
+  let currentPart = 0;
+  let firstPage = true;
+  let hasAudioUnlock = false;
+  let showingAnswer = false;
+
+  // ====== 工具 ======
+  function normalize(str) {
+    return str.toLowerCase().replace(/[.,!?;:—–…«»"()]/g, "").trim();
+  }
+
+  // ====== 打字机音效 ======
+  let audioCtx;
+  function ensureAudioCtx() {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC();
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }
+  function typewriterClick() {
+    ensureAudioCtx();
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "square";
+    osc.frequency.setValueAtTime(1500, now);
+    gain.gain.setValueAtTime(0.1, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(now);
+    osc.stop(now + 0.05);
+  }
+
+  // ====== 语音 ======
+  let speaking = false;
+  let loopTimer = null;
+  function speak(text) {
+    stopSpeak();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "ru-RU";
+    u.rate = 0.8;
+    u.onend = () => { if (speaking) loopTimer = setTimeout(() => speak(text), 900); };
+    speechSynthesis.speak(u);
+  }
+  function stopSpeak() { clearTimeout(loopTimer); speechSynthesis.cancel(); }
+  function toggleSpeak() {
+    const text = cards[currentCard].parts[currentPart].ru;
+    hasAudioUnlock = true;
+    if (speaking) { speaking = false; stopSpeak(); }
+    else { speaking = true; speak(text); }
+  }
+
+  // ====== 渲染 ======
+  function renderPart() {
+    stopSpeak(); speaking = false;
+    const part = cards[currentCard].parts[currentPart];
+    document.getElementById("cn").innerText = "中文提示：" + part.cn;
+    const inputsDiv = document.getElementById("inputs");
+    inputsDiv.innerHTML = "";
+    document.getElementById("answer").style.display = "none";
+    showingAnswer = false;
+
+    const tokens = part.ru.split(/\s+/);
+    tokens.forEach((tok, i) => {
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.className = "word-input";
+      inp.dataset.correct = tok;
+
+      // 即时判定
+      inp.addEventListener("input", () => {
+        typewriterClick();
+        if (normalize(inp.value) === normalize(tok)) {
+          inp.classList.remove("wrong");
+          inp.classList.add("correct");
+          inp.disabled = true;
+          const next = inputsDiv.querySelectorAll("input")[i+1];
+          if (next) next.focus();
+          else showAnswer();
+        }
+      });
+
+      inp.addEventListener("keydown", (e) => {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault(); e.stopPropagation();
+          if (normalize(inp.value) !== normalize(tok)) inp.classList.add("wrong");
+          const next = inputsDiv.querySelectorAll("input")[i+1];
+          if (next) next.focus();
+          else showAnswer();
+        }
+      });
+
+      inputsDiv.appendChild(inp);
+    });
+
+    const first = inputsDiv.querySelector("input");
+    if (first) first.focus();
+
+    // 自动朗读逻辑
+    if (!firstPage && hasAudioUnlock) {
+      speaking = true;
+      speak(part.ru);
+    }
+    firstPage = false;
+  }
+
+  function showAnswer() {
+    const part = cards[currentCard].parts[currentPart];
+    document.getElementById("ru").textContent = part.ru;
+    document.getElementById("phon").textContent = "重音：" + part.phon;
+    document.getElementById("pos").textContent = "词性：" + part.pos;
+    document.getElementById("cnAnswer").textContent = "中文：" + part.cn;
+    document.getElementById("answer").style.display = "block";
+    showingAnswer = true;
+  }
+
+  function nextPage() {
+    currentPart++;
+    if (currentPart >= cards[currentCard].parts.length) {
+      currentCard = (currentCard+1) % cards.length;
+      currentPart = 0;
+    }
+    renderPart();
+  }
+
+  document.addEventListener("keydown", e => {
+    if ((e.key === " " || e.key === "Enter") && showingAnswer) {
+      e.preventDefault();
+      nextPage();
+    }
+  });
+
+  renderPart();
+  </script>
+</body>
+</html>
