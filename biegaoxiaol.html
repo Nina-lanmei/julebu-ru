@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <title>小测试 · 逐词输入（终极稳定版）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin: 30px; background: #f4f6f9; color:#222; }
+    h1 { color: #2a2a2a; margin-bottom: 12px; }
+    .card { border: 1px solid #ccc; padding: 20px; margin: 20px auto; width: 92%; max-width: 960px;
+            border-radius: 12px; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,.06); }
+    .word-row { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
+    .word-block { display:inline-flex; align-items:center; gap:6px; }
+    .word-input { width: 150px; padding: 8px 10px; font-size: 18px; text-align: center;
+                  border: 1px solid #d0d7de; border-radius: 8px; outline: none; }
+    .word-input:focus { box-shadow: 0 0 0 3px rgba(51,136,255,.18); border-color: #3388ff; }
+    .punct { font-size:20px; font-weight:700; margin-left:2px; color:#444; }
+    .correct { background: #c8f7c5; border: 1px solid #47a447 !important; }
+    .wrong { background: #f8d7da; border: 1px solid #f44336 !important; color: #b00020; font-weight: bold; }
+    .answer-box { margin: 18px auto 0; padding: 16px; border-radius: 10px; background: #eef3fc; width:92%; max-width: 960px;
+                  box-shadow: inset 0 0 6px rgba(0,0,0,0.06); text-align:left; }
+    .answer-box .row { margin:6px 0; }
+    .label { display:inline-block; min-width:72px; color:#555; }
+    .ru { font-size: 22px; font-weight: 700; color: #003366; }
+    .btn { padding:10px 18px; margin:8px; border:1px solid #aaa; border-radius:8px; background:#f0f3f7; cursor:pointer; font-size:18px; }
+    .btn:hover { background:#e6ebf2; }
+    .muted { color:#666; font-size:14px; margin-bottom:10px; }
+    .mobile-only { display:none; }
+    @media (max-width:768px){.mobile-only{display:inline-block}}
+  </style>
+</head>
+<body>
+  <h1>📖 小测试</h1>
+  <p class="muted">
+    点击「🔊 播放/暂停」开始朗读；输入正确变绿，错误变红；<br>
+    整句完成后显示答案，再按空格/回车或➡️进入下一页。
+  </p>
+
+  <div class="card">
+    <div id="cn" style="font-size:18px; margin-bottom:12px;"></div>
+    <div id="inputs" class="word-row"></div>
+    <div class="controls" style="margin-top:8px;">
+      <button class="btn" id="speakBtn">🔊 播放/暂停</button>
+      <button class="btn mobile-only" id="nextBtn">➡️ 下一页</button>
+    </div>
+  </div>
+
+  <div id="answer" class="answer-box" style="display:none;">
+    <div class="row"><span class="label">俄语：</span><span id="ru" class="ru"></span></div>
+    <div class="row"><span class="label">重音：</span><span id="phon"></span></div>
+    <div class="row"><span class="label">词性：</span><span id="pos"></span></div>
+    <div class="row"><span class="label">中文：</span><span id="cnAnswer"></span></div>
+  </div>
+
+  <script>
+  // —— 数据 —— 
+  const pages = [
+    { cn: "我们（主语）", ru: "Мы", phon: "Мы", pos: "代词" },
+    { cn: "高兴", ru: "рады", phon: "ра́ды", pos: "形容词" },
+    { cn: "欢迎您", ru: "приветствовать вас", phon: "приве́тствовать вас", pos: "动词 + 代词" },
+    { cn: "在我们公司", ru: "в нашей компании", phon: "в на́шей компа́нии", pos: "介词词组" },
+    { cn: "整句：我们很高兴在我们公司欢迎您！",
+      ru: "Мы рады приветствовать вас в нашей компании!",
+      phon: "Мы ра́ды приве́тствовать вас в на́шей компа́нии!", pos: "句子" }
+  ];
+
+  let idx=0, showingAnswer=false;
+  let audioUnlocked=false, speaking=false, loopTimer=null;
+  let ruVoice=null;
+
+  // —— voice 选择 —— 
+  function pickRuVoice(){
+    const voices=speechSynthesis.getVoices();
+    ruVoice = voices.find(v => v.lang.startsWith('ru')) || null;
+  }
+  pickRuVoice();
+  speechSynthesis.onvoiceschanged=pickRuVoice;
+
+  function stopSpeak(){ clearTimeout(loopTimer); speechSynthesis.cancel(); }
+  function speak(text){
+    if(!audioUnlocked) return;
+    stopSpeak();
+    const u=new SpeechSynthesisUtterance(text);
+    if(ruVoice) u.voice=ruVoice;
+    u.lang="ru-RU"; u.rate=0.85;
+    u.onend=()=>{ if(speaking) loopTimer=setTimeout(()=>speak(text),1500); };
+    speechSynthesis.speak(u);
+  }
+
+  // —— 清脆柔和的打字机音效 —— 
+  let audioCtx;
+  function ensureAudioCtx(){
+    if(!audioCtx){ const AC=window.AudioContext||window.webkitAudioContext; audioCtx=new AC(); }
+    if(audioCtx.state==='suspended') audioCtx.resume();
+  }
+  function keyClick(){
+    ensureAudioCtx();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "square";
+    osc.frequency.setValueAtTime(2500, audioCtx.currentTime); // 高频，清脆
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);      // 音量降低，更柔和
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+0.04);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime+0.04);
+  }
+
+  function renderPage(){
+    stopSpeak(); speaking=false; showingAnswer=false;
+    document.getElementById('answer').style.display='none';
+    const {cn,ru}=pages[idx];
+    document.getElementById('cn').textContent="中文提示："+cn;
+    const inputsDiv=document.getElementById('inputs'); inputsDiv.innerHTML="";
+    const tokens=ru.trim().split(/\s+/);
+    tokens.forEach((tok,i)=>{
+      const inp=document.createElement('input');
+      inp.type='text'; inp.className='word-input'; inp.dataset.correct=tok;
+      inp.addEventListener('input',()=>{
+        keyClick();
+        if(!audioUnlocked){ audioUnlocked=true; }
+        if(inp.value.trim().toLowerCase()===tok.toLowerCase()){
+          inp.classList.remove('wrong'); inp.classList.add('correct'); inp.disabled=true;
+          const next=inputsDiv.querySelectorAll('input')[i+1];
+          if(next) next.focus(); else showAnswer();
+        }
+      });
+      inp.addEventListener('keydown',(e)=>{
+        if(e.key===' '||e.key==='Enter'){ e.preventDefault(); keyClick();
+          if(inp.value.trim().toLowerCase()!==tok.toLowerCase()) inp.classList.add('wrong');
+          const next=inputsDiv.querySelectorAll('input')[i+1];
+          if(next) next.focus(); else showAnswer();
+        }
+      });
+      inputsDiv.appendChild(inp);
+    });
+    const first=inputsDiv.querySelector('input'); if(first) first.focus();
+    if(audioUnlocked){ speaking=true; speak(ru); }
+  }
+
+  function showAnswer(){
+    const p=pages[idx];
+    document.getElementById('ru').textContent=p.ru;
+    document.getElementById('phon').textContent=p.phon;
+    document.getElementById('pos').textContent=p.pos;
+    document.getElementById('cnAnswer').textContent=p.cn;
+    document.getElementById('answer').style.display='block';
+    showingAnswer=true;
+  }
+  function nextPage(){ idx=(idx+1)%pages.length; renderPage(); }
+
+  document.addEventListener('keydown',(e)=>{
+    if((e.key===' '||e.key==='Enter')&&showingAnswer){ e.preventDefault(); nextPage(); }
+  });
+  document.getElementById('speakBtn').onclick=()=>{
+    if(!audioUnlocked){ audioUnlocked=true; }
+    if(speaking){ speaking=false; stopSpeak(); }
+    else{ speaking=true; speak(pages[idx].ru); }
+  };
+  document.getElementById('nextBtn').onclick=()=>{ if(showingAnswer) nextPage(); else showAnswer(); };
+
+  renderPage();
+  </script>
+</body>
+</html>
