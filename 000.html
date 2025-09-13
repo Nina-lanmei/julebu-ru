@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <title>小测试</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin: 30px; background: #f4f6f9; color:#222; }
+    h1 { color: #2a2a2a; margin-bottom: 12px; }
+    .card { border: 1px solid #ccc; padding: 20px; margin: 20px auto; width: 92%; max-width: 960px;
+            border-radius: 12px; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,.06); }
+    .word-row { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
+    .word-block { display:flex; align-items:center; }
+    .word-input { width: 150px; padding: 8px 10px; font-size: 18px; text-align: center;
+                  border: 1px solid #d0d7de; border-radius: 8px; outline: none; }
+    .word-input:focus { box-shadow: 0 0 0 3px rgba(51,136,255,.18); border-color: #3388ff; }
+    .punct { font-size:20px; font-weight:700; margin-left:4px; color:#444; }
+    .correct { background: #c8f7c5; border: 1px solid #47a447 !important; }
+    .wrong { background: #f8d7da; border: 1px solid #f44336 !important; color: #b00020; font-weight: bold; }
+    .answer-box { margin: 18px auto 0; padding: 16px; border-radius: 10px; background: #eef3fc; width:92%; max-width: 960px;
+                  box-shadow: inset 0 0 6px rgba(0,0,0,0.06); text-align:left; }
+    .answer-box .row { margin:6px 0; }
+    .label { display:inline-block; min-width:92px; color:#555; }
+    .ru { font-size: 22px; font-weight: 700; color: #003366; }
+    .btn { padding:10px 18px; margin:8px; border:1px solid #aaa; border-radius:8px; background:#f0f3f7; cursor:pointer; font-size:18px; }
+    .btn:hover { background:#e6ebf2; }
+    .muted { color:#666; font-size:14px; margin:10px 0 18px; }
+    .notice { color:#b00020; font-size:14px; margin:6px 0 18px; }
+  </style>
+</head>
+<body>
+  <h1>📖 小测试</h1>
+  <p class="muted">
+    输入单词后按空格/回车判定 → 本页全部完成后 → 再按空格显示答案 → 再按空格进入下一页。<br>
+    回退：在词组/句子页，<b>Backspace</b>（光标在最前或输入为空）可回到上一个词。<br>
+    朗读：电脑端输入后自动朗读；手机/平板需点 🔊。<br>
+    跳过：点➡️ 下一页（未显示答案→先显示；已显示→下一页）。
+  </p>
+  <p class="notice">📱 手机/平板：如点🔊没声音，请再点击一次（系统限制）。</p>
+
+  <div class="card">
+    <div id="cn" style="font-size:18px; margin-bottom:12px;"></div>
+    <div id="inputs" class="word-row"></div>
+    <div class="controls" style="margin-top:8px;">
+      <button class="btn" id="speakBtn">🔊 播放/暂停</button>
+      <button class="btn" id="nextBtn">➡️ 下一页</button>
+    </div>
+  </div>
+
+  <div id="answer" class="answer-box" style="display:none;">
+    <div class="row"><span class="label">俄语：</span><span id="ru" class="ru"></span></div>
+    <div class="row"><span class="label">重音：</span><span id="phon"></span></div>
+    <div class="row"><span class="label">词性/语法：</span><span id="pos"></span></div>
+    <div class="row"><span class="label">中文：</span><span id="cnAnswer"></span></div>
+  </div>
+
+  <script>
+  const pages = [
+    { cn:"液压分配器（第一格）", ru:"Гидрораспределитель", phon:"Гидрораспредели́тель", pos:"名词 · 第一格", type:"word" },
+    { cn:"用于（短尾形）", ru:"предназначен", phon:"предназна́чен", pos:"短尾形", type:"word" },
+    { cn:"‘控制’（第一格）", ru:"управление", phon:"управле́ние", pos:"名词 · 第一格", type:"word" },
+    { cn:"‘控制’（二格单）", ru:"управления", phon:"управле́ния", pos:"名词 · 二格单", type:"word" },
+    { cn:"流动（第一格）", ru:"поток", phon:"пото́к", pos:"名词 · 第一格", type:"word" },
+    { cn:"流动（工具格复）", ru:"потоками", phon:"пото́ками", pos:"名词 · 工具格复", type:"word" },
+    { cn:"工作液体（词组，一格）", ru:"рабочая жидкость", phon:"рабо́чая жи́дкость", pos:"名词短语 · 一格", type:"phrase" },
+    { cn:"工作液体（词组，二格）", ru:"рабочей жидкости", phon:"рабо́чей жи́дкости", pos:"名词短语 · 二格", type:"phrase" },
+    { cn:"液压系统（第一格）", ru:"гидросистема", phon:"гидросисте́ма", pos:"名词 · 第一格", type:"word" },
+    { cn:"液压系统（前置格）", ru:"гидросистеме", phon:"гидросисте́ме", pos:"名词 · 前置格", type:"word" },
+    { cn:"整句：液压分配器用于控制液压系统中工作液体的流动。",
+      ru:"Гидрораспределитель предназначен для управления потоками рабочей жидкости в гидросистеме.",
+      phon:"Гидрораспредели́тель предназна́чен для управле́ния пото́ками рабо́чей жи́дкости в гидросисте́ме.",
+      pos:"整句", type:"sentence" },
+
+    { cn:"由…组成（不定式）", ru:"состоять", phon:"состоя́ть", pos:"动词 · 不定式", type:"word" },
+    { cn:"由…组成（3单）", ru:"состоит", phon:"состои́т", pos:"动词 · 3单", type:"word" },
+    { cn:"几个（数量词·基本形）", ru:"несколько", phon:"не́сколько", pos:"数量词 · 基本形", type:"word" },
+    { cn:"几个（属格复）", ru:"нескольких", phon:"не́скольких", pos:"数量词 · 属格复", type:"word" },
+    { cn:"阀片（第一格 阴）", ru:"секция", phon:"се́кция", pos:"名词 · 第一格 阴", type:"word" },
+    { cn:"阀片（二格复 阴）", ru:"секций", phon:"се́кций", pos:"名词 · 二格复 阴", type:"word" },
+    { cn:"执行机构（词组，一格/四格）", ru:"исполнительный механизм", phon:"исполни́тельный механи́зм", pos:"词组 · 一格/四格", type:"phrase" },
+    { cn:"整句：它由若干阀片组成，每一个阀片负责一个执行机构。",
+      ru:"Он состоит из нескольких секций, каждая из которых отвечает за отдельный исполнительный механизм.",
+      phon:"Он состои́т из не́скольких се́кций, ка́ждая из кото́рых отвеча́ет за отде́льный исполни́тельный механи́зм.",
+      pos:"整句", type:"sentence" }
+  ];
+
+  let idx=0, showingAnswer=false, pageComplete=false;
+  let ruVoice=null, speaking=false, audioUnlocked=false, loopTimer=null;
+  const isMobile=/Mobi|Android|iPad|iPhone/i.test(navigator.userAgent);
+
+  function pickRuVoice(){const v=speechSynthesis.getVoices(); ruVoice=v.find(x=>x.lang.toLowerCase().startsWith('ru'))||null;}
+  pickRuVoice(); speechSynthesis.onvoiceschanged=pickRuVoice;
+
+  function stopSpeak(){ clearTimeout(loopTimer); speechSynthesis.cancel(); }
+  function speak(text){ if(!audioUnlocked||!speaking) return;
+    stopSpeak(); const u=new SpeechSynthesisUtterance(text);
+    if(ruVoice) u.voice=ruVoice; u.lang="ru-RU"; u.rate=0.7;
+    u.onend=()=>{ if(speaking && !isMobile) loopTimer=setTimeout(()=>speak(text),1200); };
+    speechSynthesis.speak(u);
+  }
+
+  // 打字机音效
+  let audioCtx;
+  function ensureAudioCtx(){ if(!audioCtx){ const AC=window.AudioContext||window.webkitAudioContext; audioCtx=new AC(); } if(audioCtx.state==='suspended') audioCtx.resume(); }
+  function keyClick(){ ensureAudioCtx(); const osc=audioCtx.createOscillator(), gain=audioCtx.createGain();
+    osc.type="triangle"; osc.frequency.setValueAtTime(2200, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.015, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+0.05);
+    osc.connect(gain).connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime+0.05); }
+
+  function normalize(s){ return (s||"").toLowerCase().replace(/[.,!?;:—–…«»"()]/g,""); }
+  function recomputePageComplete(){ const inputs=document.querySelectorAll('#inputs input.word-input'); pageComplete=Array.from(inputs).every(i=>i.classList.contains('done')); }
+  function focusNextNotDone(cur){ const all=Array.from(document.querySelectorAll('#inputs input.word-input')); const i=all.indexOf(cur);
+    for(let j=i+1;j<all.length;j++){ if(!all[j].classList.contains('done')){ all[j].focus(); return; } } }
+
+  function attachInputHandlers(inp, fullText, allowBack=false){
+    inp.addEventListener('input',()=>{ keyClick(); if(!audioUnlocked) audioUnlocked=true; if(!isMobile && !speaking){ speaking=true; speak(fullText); } });
+    inp.addEventListener('keydown',(e)=>{
+      if(e.key.length===1||e.key===' ') keyClick();
+      if(e.key===' '||e.key==='Enter'){ e.preventDefault();
+        inp.classList.add('done'); const ok=normalize(inp.value)===normalize(inp.dataset.correct);
+        inp.classList.toggle('correct',ok); inp.classList.toggle('wrong',!ok);
+        recomputePageComplete(); if(!pageComplete) focusNextNotDone(inp); return; }
+    });
+  }
+
+  function renderPage(){
+    stopSpeak(); showingAnswer=false; pageComplete=false;
+    document.getElementById('answer').style.display='none';
+    const p=pages[idx]; document.getElementById('cn').textContent="中文提示："+p.cn;
+    const inputsDiv=document.getElementById('inputs'); inputsDiv.innerHTML="";
+    const tokenRegex=/^(.+?)([.,!?;:—–…«»"()]*)$/;
+    const tokens=p.ru.trim().split(/\s+/);
+    tokens.forEach(w=>{
+      const block=document.createElement("div"); block.className="word-block";
+      const inp=document.createElement("input"); inp.type="text"; inp.className="word-input";
+      let base=w,punct=""; const m=w.match(tokenRegex); if(m){ base=m[1]; punct=m[2]; }
+      inp.dataset.correct=base; attachInputHandlers(inp,p.ru,true);
+      block.appendChild(inp); if(punct){ const span=document.createElement("span"); span.className="punct"; span.textContent=punct; block.appendChild(span); }
+      inputsDiv.appendChild(block);
+    });
+    const first=inputsDiv.querySelector('input.word-input'); if(first) first.focus();
+    if(!isMobile&&audioUnlocked&&speaking) speak(p.ru);
+  }
+
+  function showAnswer(){ const p=pages[idx]; document.getElementById('ru').textContent=p.ru; document.getElementById('phon').textContent=p.phon||""; document.getElementById('pos').textContent=p.pos||""; document.getElementById('cnAnswer').textContent=p.cn||""; document.getElementById('answer').style.display='block'; showingAnswer=true; }
+  
+  function nextPage(){
+    if(idx === pages.length - 1){
+      stopSpeak();
+      document.getElementById('inputs').innerHTML = "";
+      document.getElementById('cn').textContent = "🎉 恭喜！您已完成所有测试。";
+      document.getElementById('answer').style.display = "none";
+      document.getElementById('speakBtn').style.display = "none";
+      document.getElementById('nextBtn').style.display = "none";
+    } else {
+      idx++;
+      renderPage();
+    }
+  }
+
+  document.addEventListener('keydown',(e)=>{ if(e.key===' '||e.key==='Enter'){ if(!showingAnswer&&pageComplete){ e.preventDefault(); showAnswer(); } else if(showingAnswer){ e.preventDefault(); nextPage(); } } });
+  document.getElementById('speakBtn').onclick=()=>{ if(!audioUnlocked){ audioUnlocked=true; const init=new SpeechSynthesisUtterance("тест"); init.lang="ru-RU"; speechSynthesis.speak(init); }
+    if(speaking){ speaking=false; stopSpeak(); } else { speaking=true; speak(pages[idx].ru); } };
+  document.getElementById('nextBtn').onclick=()=>{ if(!showingAnswer){ showAnswer(); } else { nextPage(); } };
+
+  renderPage();
+  </script>
+</body>
+</html>
