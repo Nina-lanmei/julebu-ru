@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <title>小测试</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin: 28px; background: #f5f7fb; color:#213547; }
+    h1 { margin: 0 0 10px; font-weight: 800; }
+    .muted { color:#667085; font-size:14px; margin:4px 0 14px; }
+    .notice { color:#b42318; font-size:13px; margin:2px 0 14px; }
+
+    .card { border: 1px solid #e5e7eb; padding: 20px; margin: 16px auto; width: 94%; max-width: 980px;
+            border-radius: 14px; background: #fff; box-shadow: 0 6px 18px rgba(23,43,77,0.06); }
+    #cn { font-size:18px; margin-bottom: 14px; }
+
+    .word-row { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
+    .word-block { display:flex; align-items:center; background:#f9fafb; padding:6px 8px; border-radius: 10px; }
+    .word-input {
+      min-width: 160px; padding: 10px 12px; font-size: 18px; text-align: center;
+      border: 1px solid #d0d7de; border-radius: 10px; outline: none; transition: box-shadow .15s, border-color .15s;
+      background: #fff;
+    }
+    .word-input:focus { box-shadow: 0 0 0 4px rgba(51,136,255,.16); border-color: #3388ff; }
+    .punct { font-size:18px; font-weight:700; margin:0 6px; color:#333; }
+    .correct { background: #dcfce7 !important; border-color:#16a34a !important; }
+    .wrong { background: #fee2e2 !important; border-color:#ef4444 !important; color:#991b1b !important; }
+    .done { box-shadow: inset 0 0 0 1px rgba(31,41,55,.08); }
+
+    .controls { margin-top: 10px; display:flex; justify-content:center; gap:10px; flex-wrap:wrap; }
+    .btn { padding:10px 16px; border:1px solid #cbd5e1; border-radius:10px; background:#f1f5f9; cursor:pointer; font-size:16px; }
+    .btn:hover { background:#e2e8f0; }
+
+    .answer-box { margin: 16px auto 0; padding: 16px; border-radius: 12px; background: #eef2ff; width:94%; max-width: 980px;
+                  box-shadow: inset 0 0 6px rgba(0,0,0,.05); text-align:left; }
+    .answer-box .row { margin:6px 0; }
+    .label { display:inline-block; min-width:96px; color:#475569; }
+    .ru { font-size: 22px; font-weight: 800; color: #0f172a; }
+  </style>
+</head>
+<body>
+  <h1>📖 小测试</h1>
+  <p class="muted">
+    逐词/词组输入 → 空格/回车确认一个 → 本页全部完成后，再按空格显示答案 → 再按空格进入下一页。<br/>
+    回退：在输入框开头按 <b>Backspace</b> 回到上一个已确认单词（并清除对错标记）。<br/>
+    朗读：电脑端开始输入后自动循环朗读；手机/平板需点 🔊（若无声，请再点一次，这是系统限制）。<br/>
+    跳过：点 ➡️ 下一页（若答案未显示，将先显示答案；已显示则翻页）。<br/>
+    返回：点 ⬅️ 上一页，保留你上次的输入与对错标记，答案面板默认隐藏。
+  </p>
+  <p class="notice">⚠️ 括号与标点会显示，但无需输入（只输入单词/词组本体）。</p>
+
+  <div class="card">
+    <div id="cn"></div>
+    <div id="inputs" class="word-row"></div>
+    <div class="controls">
+      <button class="btn" id="prevBtn">⬅️ 上一页</button>
+      <button class="btn" id="speakBtn">🔊 播放/暂停</button>
+      <button class="btn" id="nextBtn">➡️ 下一页</button>
+    </div>
+  </div>
+
+  <div id="answer" class="answer-box" style="display:none;">
+    <div class="row"><span class="label">俄语：</span><span id="ru" class="ru"></span></div>
+    <div class="row"><span class="label">词性/语法：</span><span id="pos"></span></div>
+    <div class="row"><span class="label">中文：</span><span id="cnAnswer"></span></div>
+  </div>
+
+  <script>
+  // ========= Part 1 全量页面 =========
+  // 规则：判定用 ruClean（无重音），答案用 ruStress（带重音）
+  const P = [];
+
+  // —— 句1 —— //
+  P.push(
+    {cn:"液压分配器（第一格）", pos:"名词 · 一格", ruClean:"Гидрораспределитель", ruStress:"Гидрораспредели́тель"},
+    {cn:"用于（短尾形）", pos:"短尾形", ruClean:"предназначен", ruStress:"предназна́чен"},
+    {cn:"流（第一格）", pos:"名词 · 一格", ruClean:"поток", ruStress:"пото́к"},
+    {cn:"用于控制流体（完整词组）", pos:"介词 + 二格复", ruClean:"для управления потоками", ruStress:"для управле́ния пото́ками"},
+    {cn:"工作液体（词组 一格）", pos:"词组 · 一格", ruClean:"рабочая жидкость", ruStress:"рабо́чая жи́дкость"},
+    {cn:"液压系统（第一格）", pos:"名词 · 一格", ruClean:"гидросистема", ruStress:"гидросисте́ма"},
+    {cn:"在液压系统中（前置格）", pos:"介词 + 前置格", ruClean:"в гидросистеме", ruStress:"в гидросисте́ме"},
+    {cn:"液压分配器用于控制液压系统中工作液体的流动。", pos:"整句",
+      ruClean:"Гидрораспределитель предназначен для управления потоками рабочей жидкости в гидросистеме.",
+      ruStress:"Гидрораспредели́тель предназна́чен для управле́ния пото́ками рабо́чей жи́дкости в гидросисте́ме."}
+  );
+
+  // —— 句2 —— //
+  P.push(
+    {cn:"由……组成（不定式）", pos:"动词 · 不定式", ruClean:"состоять", ruStress:"состоя́ть"},
+    {cn:"由……组成（3单）", pos:"动词 · 3单", ruClean:"состоит", ruStress:"состои́т"},
+    {cn:"若干（带 из 的属格复）", pos:"介词 + 属格复", ruClean:"из нескольких", ruStress:"из не́скольких"},
+    {cn:"阀片/分段（第一格）", pos:"名词 · 一格", ruClean:"секция", ruStress:"се́кция"},
+    {cn:"由若干部分组成（完整搭配）", pos:"固定搭配", ruClean:"состоять из нескольких секций", ruStress:"состоя́ть из не́скольких се́кций"},
+    {cn:"负责（不定式）", pos:"动词 · 不定式", ruClean:"отвечать", ruStress:"отвеча́ть"},
+    {cn:"负责……（带 за）", pos:"动词 3单 + 接格", ruClean:"отвечает за", ruStress:"отвеча́ет за"},
+    {cn:"执行机构（词组 一格）", pos:"词组 · 一格", ruClean:"исполнительный механизм", ruStress:"исполни́тельный механи́зм"},
+    {cn:"变幅缸（词组 二格）", pos:"词组 · 二格", ruClean:"цилиндр подъема", ruStress:"цили́ндр подъёма"},
+    {cn:"回转缸（词组 二格）", pos:"词组 · 二格", ruClean:"цилиндр поворота", ruStress:"цили́ндр поворо́та"},
+    {cn:"伸缩缸（词组 二格）", pos:"词组 · 二格", ruClean:"цилиндр выдвижения", ruStress:"цили́ндр выдвиже́ния"},
+    {cn:"它由若干阀片组成，每一个阀片负责一个执行机构（例如：变幅油缸、回转油缸或伸缩油缸）。", pos:"整句",
+      ruClean:"Он состоит из нескольких секций, каждая из которых отвечает за отдельный исполнительный механизм (например, цилиндр подъема, поворота или выдвижения).",
+      ruStress:"Он состои́т из не́скольких се́кций, ка́ждая из кото́рых отвеча́ет за отде́льный исполни́тельный механи́зм (наприме́р, цили́ндр подъёма, поворо́та или выдвиже́ния)."}
+  );
+
+  // —— 句3 —— //
+  P.push(
+    {cn:"操作员（第一格）", pos:"名词 · 一格", ruClean:"оператор", ruStress:"опера́тор"},
+    {cn:"移动（不定式）", pos:"动词 · 不定式", ruClean:"перемещать", ruStress:"перемеща́ть"},
+    {cn:"移动（3单）", pos:"动词 · 3单", ruClean:"перемещает", ruStress:"перемеща́ет"},
+    {cn:"操纵杆（名词 + 二格）", pos:"名词 + 二格", ruClean:"рычаг управления", ruStress:"рыча́г управле́ния"},
+    {cn:"阀芯（第一格）", pos:"名词 · 一格", ruClean:"золотник", ruStress:"золо́тник"},
+    {cn:"在相应的阀片中（前置格）", pos:"介词 + 前置格", ruClean:"в соответствующей секции", ruStress:"в соответству́ющей се́кции"},
+    {cn:"位移/移动（不定式）", pos:"动词 · 不定式", ruClean:"смещаться", ruStress:"смеща́ться"},
+    {cn:"位移/移动（3单）", pos:"动词 · 3单", ruClean:"смещается", ruStress:"смеща́ется"},
+    {cn:"当操作人员推动操纵杆时，相应阀片内的阀芯发生移动。", pos:"整句",
+      ruClean:"Когда оператор перемещает рычаг управления, золотник в соответствующей секции смещается.",
+      ruStress:"Когда́ опера́тор перемеща́ет рыча́г управле́ния, золо́тник в соответству́ющей се́кции смеща́ется."}
+  );
+
+  // —— 句4 —— //
+  P.push(
+    {cn:"结果是/由于（固定词组）", pos:"固定词组", ruClean:"в результате", ruStress:"в результа́те"},
+    {cn:"在压力下（工具格）", pos:"固定词组 · 工具格", ruClean:"под давлением", ruStress:"под давле́нием"},
+    {cn:"被引导（不定式）", pos:"动词 · 不定式", ruClean:"направляться", ruStress:"направля́ться"},
+    {cn:"被引导到所需通道（搭配）", pos:"动词 + 宾格", ruClean:"направляется в нужный канал", ruStress:"направля́ется в ну́жный кана́л"},
+    {cn:"无杆腔（液压缸，词组）", pos:"词组 · 阴一格", ruClean:"поршневая полость гидроцилиндра", ruStress:"поршнева́я по́лость гидроцили́ндра"},
+    {cn:"有杆腔（液压缸，词组）", pos:"词组 · 阴一格", ruClean:"штоковая полость гидроцилиндра", ruStress:"штоко́вая по́лость гидроцили́ндра"},
+    {cn:"结果是：来自液压泵的加压工作液被引导进入所需通道——要么进入无杆腔，要么进入有杆腔。", pos:"整句",
+      ruClean:"В результате рабочая жидкость под давлением от насоса направляется в нужный канал: либо к поршневой, либо к штоковой полости гидроцилиндра.",
+      ruStress:"В результа́те рабо́чая жи́дкость под давле́нием от насо́са направля́ется в ну́жный кана́л: ли́бо к поршнево́й, ли́бо к штоко́вой по́лости гидроцили́ндра."}
+  );
+
+  // —— 句5 —— //
+  P.push(
+    {cn:"回流（词组 一格）", pos:"词组 · 一格", ruClean:"обратный поток", ruStress:"обра́тный пото́к"},
+    {cn:"返回（不定式）", pos:"动词 · 不定式", ruClean:"возвращаться", ruStress:"возвраща́ться"},
+    {cn:"返回（3单）", pos:"动词 · 3单", ruClean:"возвращается", ruStress:"возвраща́ется"},
+    {cn:"通过分配器（工具格）", pos:"介词 + 工具格", ruClean:"через распределитель", ruStress:"че́рез распредели́тель"},
+    {cn:"回油管路（词组 一格）", pos:"词组 · 一格", ruClean:"сливная линия", ruStress:"сли́вная ли́ния"},
+    {cn:"进入回油管路（宾格）", pos:"介词 + 宾格", ruClean:"в сливную линию", ruStress:"в сли́вную ли́нию"},
+    {cn:"（进入油箱）", pos:"括号 · 前置格", ruClean:"(в бак)", ruStress:"(в ба́к)"},
+    {cn:"与此同时，另一腔室的回油通过分配器回到回油管路（进入油箱）。", pos:"整句",
+      ruClean:"Обратный поток жидкости из другой полости возвращается через распределитель в сливную линию (в бак).",
+      ruStress:"Обра́тный пото́к жи́дкости из друго́й по́лости возвраща́ется че́рез распредели́тель в сли́вную ли́нию (в ба́к)."}
+  );
+
+  // 为每一页准备存储（返回上一页时保留输入与对错）
+  P.forEach(p => p.userInputs = []);
+
+  // ========= 朗读 & 状态 =========
+  let idx=0, showingAnswer=false, pageComplete=false;
+  let ruVoice=null, speaking=false, audioUnlocked=false, loopTimer=null;
+  const isMobile=/Mobi|Android|iPad|iPhone/i.test(navigator.userAgent);
+
+  function pickRuVoice(){const v=speechSynthesis.getVoices(); ruVoice=v.find(x=>x.lang.toLowerCase().startsWith('ru'))||null;}
+  pickRuVoice(); speechSynthesis.onvoiceschanged=pickRuVoice;
+
+  function stopSpeak(){ clearTimeout(loopTimer); speechSynthesis.cancel(); }
+  function speakLoop(text){
+    if(!audioUnlocked || !speaking) return;
+    stopSpeak();
+    const u=new SpeechSynthesisUtterance(text);
+    if(ruVoice) u.voice=ruVoice;
+    u.lang="ru-RU"; u.rate=0.7;
+    u.onend=()=>{ if(speaking && !isMobile) loopTimer=setTimeout(()=>speakLoop(text), 1200); };
+    speechSynthesis.speak(u);
+  }
+
+  // ========= 工具 =========
+  function splitToken(w){
+    const lead = (w.match(/^[\(\[\{«"“]+/)||[""])[0];
+    const trail = (w.match(/[\.\,\!\?\;\:\—–…»"”\)\]\}]+$/)||[""])[0];
+    const core = w.slice(lead.length, w.length - trail.length);
+    return {lead, core, trail};
+  }
+  function normalize(s){ return (s||"").toLowerCase().replace(/[.,!?;:—–…«»"()]/g,""); }
+  function recomputePageComplete(){
+    const inputs=document.querySelectorAll('#inputs input.word-input');
+    pageComplete=Array.from(inputs).every(i=>i.classList.contains('done'));
+  }
+  function saveInputs(){
+    const inputs=document.querySelectorAll('#inputs input.word-input');
+    const p=P[idx];
+    p.userInputs=Array.from(inputs).map(inp=>({
+      value: inp.value,
+      correct: inp.classList.contains('correct'),
+      wrong: inp.classList.contains('wrong'),
+      done: inp.classList.contains('done')
+    }));
+  }
+  function restoreInputs(){
+    const p=P[idx];
+    const all=document.querySelectorAll('#inputs input.word-input');
+    if(p.userInputs.length !== all.length){ return; }
+    p.userInputs.forEach((st,i)=>{
+      const inp=all[i];
+      inp.value=st.value||"";
+      ['correct','wrong','done'].forEach(c=> inp.classList.toggle(c, !!st[c]) );
+    });
+    recomputePageComplete();
+  }
+
+  function attachInputHandlers(inp, fullText){
+    inp.addEventListener('input', ()=>{
+      if(!audioUnlocked) audioUnlocked=true;
+      if(!isMobile && !speaking){ speaking=true; speakLoop(fullText); }
+    });
+    inp.addEventListener('keydown', (e)=>{
+      if(e.key===' ' || e.key==='Enter'){
+        e.preventDefault();
+        inp.classList.add('done');
+        const ok = normalize(inp.value)===normalize(inp.dataset.correct);
+        inp.classList.toggle('correct', ok);
+        inp.classList.toggle('wrong', !ok);
+        recomputePageComplete();
+        if(!pageComplete){
+          const all=Array.from(document.querySelectorAll('#inputs input.word-input'));
+          const i=all.indexOf(inp);
+          for(let j=i+1;j<all.length;j++){
+            if(!all[j].classList.contains('done')){ all[j].focus(); break; }
+          }
+        }
+        saveInputs();
+        return;
+      }
+      // Backspace 回到上一个“已确认”的输入框，并清除其状态
+      if(e.key==='Backspace' && (inp.selectionStart===0 && inp.selectionEnd===0 || inp.value==='')){
+        e.preventDefault();
+        const all=Array.from(document.querySelectorAll('#inputs input.word-input'));
+        const i=all.indexOf(inp);
+        for(let j=i-1;j>=0;j--){
+          if(all[j].classList.contains('done')){
+            all[j].classList.remove('done','correct','wrong');
+            all[j].focus();
+            break;
+          }
+        }
+      }
+    });
+  }
+
+  // ========= 渲染 =========
+  function renderPage(){
+    stopSpeak();
+    showingAnswer=false; pageComplete=false;
+    document.getElementById('answer').style.display='none';
+
+    const p=P[idx];
+    document.getElementById('cn').textContent = "中文提示：" + p.cn;
+
+    const inputsDiv=document.getElementById('inputs'); inputsDiv.innerHTML="";
+    const tokens = p.ruClean.trim().split(/\s+/);
+
+    // 若保存的 userInputs 与 tokens 数量不一致，重置（避免“输入框数量对不上”）
+    if(p.userInputs.length !== tokens.length){ p.userInputs = new Array(tokens.length).fill(null).map(()=>({value:"",correct:false,wrong:false,done:false})); }
+
+    tokens.forEach((w,k)=>{
+      const {lead, core, trail} = splitToken(w);
+      const block=document.createElement('div'); block.className='word-block';
+
+      if(lead){ const s=document.createElement('span'); s.className='punct'; s.textContent=lead; block.appendChild(s); }
+
+      const inp=document.createElement('input');
+      inp.type="text"; inp.className="word-input"; inp.dataset.correct=core;
+      const width = Math.min(Math.max(core.length*12 + 28, 160), 540);
+      inp.style.width = width + 'px';
+      attachInputHandlers(inp, p.ruStress);
+      block.appendChild(inp);
+
+      if(trail){ const t=document.createElement('span'); t.className='punct'; t.textContent=trail; block.appendChild(t); }
+
+      inputsDiv.appendChild(block);
+    });
+
+    restoreInputs();
+    document.getElementById('prevBtn').disabled = (idx===0);
+
+    // 桌面端如已处于“播放中”，进入页面自动朗读当前页
+    if(!isMobile && audioUnlocked && speaking){ speakLoop(P[idx].ruStress); }
+    // 聚焦第一个未完成
+    const firstNotDone = Array.from(document.querySelectorAll('#inputs input.word-input')).find(i=>!i.classList.contains('done')) || document.querySelector('#inputs input.word-input');
+    if(firstNotDone) firstNotDone.focus();
+  }
+
+  // ========= 答案 / 翻页 =========
+  function showAnswer(){
+    const p=P[idx];
+    document.getElementById('ru').textContent  = p.ruStress;  // 答案显示带重音
+    document.getElementById('pos').textContent = p.pos||"";
+    document.getElementById('cnAnswer').textContent = p.cn||"";
+    document.getElementById('answer').style.display='block';
+    showingAnswer=true;
+  }
+  function nextPage(){
+    saveInputs();
+    if(idx===P.length-1){
+      stopSpeak();
+      document.getElementById('inputs').innerHTML="";
+      document.getElementById('cn').textContent="🎉 恭喜完成测试！";
+      document.getElementById('answer').style.display="none";
+      document.getElementById('speakBtn').style.display="none";
+      document.getElementById('nextBtn').style.display="none";
+      document.getElementById('prevBtn').style.display="none";
+    }else{
+      idx++; renderPage();
+    }
+  }
+  function prevPage(){
+    saveInputs();
+    if(idx>0){ idx--; renderPage(); }
+  }
+
+  // 全局：空格/回车 → 若本页已完成则显示答案；答案已显示则下一页
+  document.addEventListener('keydown',(e)=>{
+    if(e.key===' '||e.key==='Enter'){
+      if(!showingAnswer){
+        // 检查是否本页都 done
+        recomputePageComplete();
+        if(pageComplete){ e.preventDefault(); showAnswer(); }
+      }else{
+        e.preventDefault(); nextPage();
+      }
+    }
+  });
+
+  // 播放/暂停
+  document.getElementById('speakBtn').onclick=()=>{
+    if(!audioUnlocked){
+      audioUnlocked=true;
+      // 解锁 iOS/Android 音频
+      const init=new SpeechSynthesisUtterance("тест"); init.lang="ru-RU"; speechSynthesis.speak(init);
+    }
+    speaking=!speaking;
+    if(speaking) speakLoop(P[idx].ruStress); else stopSpeak();
+  };
+  document.getElementById('nextBtn').onclick=()=>{ if(!showingAnswer){ showAnswer(); } else { nextPage(); } };
+  document.getElementById('prevBtn').onclick=()=>{ prevPage(); };
+
+  // 启动
+  renderPage();
+  </script>
+</body>
+</html>
