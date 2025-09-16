@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <title>小测试</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin: 28px; background: #f5f7fb; color:#213547; }
+    h1 { margin: 0 0 10px; font-weight: 800; }
+    .muted { color:#667085; font-size:14px; margin:4px 0 14px; }
+    .notice { color:#b42318; font-size:13px; margin:2px 0 14px; }
+
+    .card { border: 1px solid #e5e7eb; padding: 20px; margin: 16px auto; width: 94%; max-width: 980px;
+            border-radius: 14px; background: #fff; box-shadow: 0 6px 18px rgba(23,43,77,0.06); }
+    #cn { font-size:18px; margin-bottom: 14px; }
+
+    .word-row { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
+    .word-block { display:flex; align-items:center; background:#f9fafb; padding:6px 8px; border-radius: 10px; }
+    .word-input {
+      min-width: 160px; padding: 10px 12px; font-size: 18px; text-align: center;
+      border: 1px solid #d0d7de; border-radius: 10px; outline: none; transition: box-shadow .15s, border-color .15s;
+      background: #fff;
+    }
+    .word-input:focus { box-shadow: 0 0 0 4px rgba(51,136,255,.16); border-color: #3388ff; }
+    .punct { font-size:18px; font-weight:700; margin:0 6px; color:#333; }
+    .correct { background: #dcfce7 !important; border-color:#16a34a !important; }
+    .wrong { background: #fee2e2 !important; border-color:#ef4444 !important; color:#991b1b !important; }
+    .done { box-shadow: inset 0 0 0 1px rgba(31,41,55,.08); }
+
+    .controls { margin-top: 10px; display:flex; justify-content:center; gap:10px; flex-wrap:wrap; }
+    .btn { padding:10px 16px; border:1px solid #cbd5e1; border-radius:10px; background:#f1f5f9; cursor:pointer; font-size:16px; }
+    .btn:hover { background:#e2e8f0; }
+
+    .answer-box { margin: 16px auto 0; padding: 16px; border-radius: 12px; background: #eef2ff; width:94%; max-width: 980px;
+                  box-shadow: inset 0 0 6px rgba(0,0,0,0.05); text-align:left; }
+    .answer-box .row { margin:6px 0; }
+    .label { display:inline-block; min-width:96px; color:#475569; }
+    .ru { font-size: 22px; font-weight: 800; color: #0f172a; }
+  </style>
+</head>
+<body>
+  <h1>📖 小测试</h1>
+  <p class="muted">
+    逐词/词组输入 → 空格/回车确认一个 → 本页全部完成后，再按空格显示答案 → 再按空格进入下一页。<br/>
+    回退：在输入框开头按 <b>Backspace</b> 回到上一个已确认单词（并清除对错标记）。<br/>
+    朗读：电脑端输入后自动循环朗读；手机/平板需点 🔊（若无声，请再点一次，这是系统限制）。<br/>
+    跳过：点 ➡️ 下一页（若答案未显示，将先显示答案；已显示则翻页）。<br/>
+    返回：点 ⬅️ 上一页，保留你上次的输入与对错标记，答案面板默认隐藏。
+  </p>
+  <p class="notice">⚠️ 标点/括号会显示，但无需输入（只输入单词/词组本体）。</p>
+
+  <div class="card">
+    <div id="cn"></div>
+    <div id="inputs" class="word-row"></div>
+    <div class="controls">
+      <button class="btn" id="prevBtn">⬅️ 上一页</button>
+      <button class="btn" id="speakBtn">🔊 播放/暂停</button>
+      <button class="btn" id="nextBtn">➡️ 下一页</button>
+    </div>
+  </div>
+
+  <div id="answer" class="answer-box" style="display:none;">
+    <div class="row"><span class="label">俄语：</span><span id="ru" class="ru"></span></div>
+    <div class="row"><span class="label">词性/语法：</span><span id="pos"></span></div>
+    <div class="row"><span class="label">中文：</span><span id="cnAnswer"></span></div>
+  </div>
+
+  <script>
+  // ============== 页面数据（无重音判定 / 带重音显示） ==============
+  // 每个对象是一页：{ cn, pos, ruClean, ruStress }
+  const P = [
+    // --- 句1: Мы уточняли... ---
+    {cn:"句1-片段1", pos:"短语", ruClean:"Мы уточняли актуальные сроки поставки", ruStress:"Мы уточня́ли актуа́льные сро́ки поставки"},
+    {cn:"句1-片段2", pos:"短语", ruClean:"однако заявленные сроки", ruStress:"одна́ко заявле́нные сро́ки"},
+    {cn:"句1-片段3", pos:"短语", ruClean:"к сожалению", ruStress:"к сожа́лению"},
+    {cn:"句1-片段4", pos:"短语", ruClean:"не соответствуют нашим ожиданиям", ruStress:"не соответству́ют на́шим ожида́ниям"},
+    {cn:"句1-整句", pos:"整句", ruClean:"Мы уточняли актуальные сроки поставки, однако заявленные сроки, к сожалению, не соответствуют нашим ожиданиям.",
+     ruStress:"Мы уточня́ли актуа́льные сро́ки поставки, одна́ко заявле́нные сро́ки, к сожа́лению, не соответству́ют на́шим ожида́ниям."},
+
+    // --- 句2: К сожалению, сроки оказались... ---
+    {cn:"句2-片段1", pos:"短语", ruClean:"К сожалению", ruStress:"К сожа́лению"},
+    {cn:"句2-片段2", pos:"短语", ruClean:"сроки оказались длиннее", ruStress:"сро́ки оказа́лись длинне́е"},
+    {cn:"句2-片段3", pos:"短语", ruClean:"чем мы рассчитывали", ruStress:"чем мы рассчи́тывали"},
+    {cn:"句2-整句", pos:"整句", ruClean:"К сожалению, сроки оказались длиннее, чем мы рассчитывали.",
+     ruStress:"К сожа́лению, сро́ки оказа́лись длинне́е, чем мы рассчи́тывали."},
+
+    // --- 句3: Просим Вас сообщить Ваше мнение... ---
+    {cn:"句3-片段1", pos:"短语", ruClean:"Просим Вас", ruStress:"Проси́м Вас"},
+    {cn:"句3-片段2", pos:"短语", ruClean:"сообщить Ваше мнение", ruStress:"сообщи́ть Ва́ше мне́ние"},
+    {cn:"句3-片段3", pos:"短语", ruClean:"по данному вопросу", ruStress:"по да́нному вопро́су"},
+    {cn:"句3-整句", pos:"整句", ruClean:"Просим Вас сообщить Ваше мнение по данному вопросу.",
+     ruStress:"Проси́м Вас сообщи́ть Ва́ше мне́ние по да́нному вопро́су."},
+
+    // --- 句4: Будем признательны за Ваши комментарии ---
+    {cn:"句4-片段1", pos:"短语", ruClean:"Будем признательны", ruStress:"Бу́дем призна́тельны"},
+    {cn:"句4-片段2", pos:"短语", ruClean:"за Ваши комментарии", ruStress:"за Ва́ши коммента́рии"},
+    {cn:"句4-整句", pos:"整句", ruClean:"Будем признательны за Ваши комментарии.",
+     ruStress:"Бу́дем призна́тельны за Ва́ши коммента́рии."},
+
+    // --- 句5: Во вложении Вы найдёте... ---
+    {cn:"句5-片段1", pos:"短语", ruClean:"Во вложении Вы найдёте", ruStress:"Во вложе́нии Вы найдёте"},
+    {cn:"句5-片段2", pos:"短语", ruClean:"чертеж продукции", ruStress:"чертёж проду́кции"},
+    {cn:"句5-片段3", pos:"短语", ruClean:"и наше официальное коммерческое предложение", ruStress:"и на́ше официа́льное коммерче́ское предложе́ние"},
+    {cn:"句5-整句", pos:"整句", ruClean:"Во вложении Вы найдёте чертеж продукции и наше официальное коммерческое предложение.",
+     ruStress:"Во вложе́нии Вы найдёте чертёж проду́кции и на́ше официа́льное коммерче́ское предложе́ние."},
+
+    // --- 句6: Будем признательны за Ваш ответ. ---
+    {cn:"句6-片段1", pos:"短语", ruClean:"Будем признательны", ruStress:"Бу́дем призна́тельны"},
+    {cn:"句6-片段2", pos:"短语", ruClean:"за Ваш ответ", ruStress:"за Ва́ш отве́т"},
+    {cn:"句6-整句", pos:"整句", ruClean:"Будем признательны за Ваш ответ.",
+     ruStress:"Бу́дем призна́тельны за Ва́ш отве́т."},
+
+    // --- 句7: За работу с заводом отвечает наш коллега Иван. Просим дождаться его ответа. ---
+    {cn:"句7-片段1", pos:"短语", ruClean:"За работу с заводом отвечает", ruStress:"За рабо́ту с заво́дом отвеча́ет"},
+    {cn:"句7-片段2", pos:"短语", ruClean:"наш коллега Иван", ruStress:"наш колле́га Ива́н"},
+    {cn:"句7-整句A", pos:"整句", ruClean:"За работу с заводом отвечает наш коллега Иван.",
+     ruStress:"За рабо́ту с заво́дом отвеча́ет наш колле́га Ива́н."},
+    {cn:"句7-片段3", pos:"短语", ruClean:"Просим дождаться его ответа", ruStress:"Проси́м дождаться его́ отве́та"},
+    {cn:"句7-整句B", pos:"整句", ruClean:"Просим дождаться его ответа.",
+     ruStress:"Проси́м дождаться его́ отве́та."},
+
+    // --- 句8: К сожалению, вынуждена сообщить следующую информацию. ---
+    {cn:"句8-片段1", pos:"短语", ruClean:"К сожалению", ruStress:"К сожа́лению"},
+    {cn:"句8-片段2", pos:"短语", ruClean:"вынуждена сообщить", ruStress:"вы́нуждена сообщи́ть"},
+    {cn:"句8-片段3", pos:"短语", ruClean:"следующую информацию", ruStress:"сле́дующую информа́цию"},
+    {cn:"句8-整句", pos:"整句", ruClean:"К сожалению, вынуждена сообщить следующую информацию.",
+     ruStress:"К сожа́лению, вы́нуждена сообщи́ть сле́дующую информа́цию."},
+
+    // --- 句9: Надеемся на Ваше понимание и принятие данной информации к сведению. ---
+    {cn:"句9-片段1", pos:"短语", ruClean:"Надеемся на Ваше понимание", ruStress:"Наде́емся на Ва́ше понима́ние"},
+    {cn:"句9-片段2", pos:"短语", ruClean:"и принятие данной информации к сведению", ruStress:"и приня́тие да́нной информа́ции к сведе́нию"},
+    {cn:"句9-整句", pos:"整句", ruClean:"Надеемся на Ваше понимание и принятие данной информации к сведению.",
+     ruStress:"Наде́емся на Ва́ше понима́ние и приня́тие да́нной информа́ции к сведе́нию."}
+  ];
+  P.forEach(p => p.userInputs = []);
+
+  // ============== 朗读 & 状态 ==============
+  let idx=0, showingAnswer=false, pageComplete=false;
+  let ruVoice=null, speaking=false, audioUnlocked=false, loopTimer=null;
+  const isMobile=/Mobi|Android|iPad|iPhone/i.test(navigator.userAgent);
+
+  function pickRuVoice(){const v=speechSynthesis.getVoices(); ruVoice=v.find(x=>x.lang.toLowerCase().startsWith('ru'))||null;}
+  pickRuVoice(); speechSynthesis.onvoiceschanged=pickRuVoice;
+
+  function stopSpeak(){ clearTimeout(loopTimer); speechSynthesis.cancel(); }
+  function speakLoop(text){
+    if(!audioUnlocked || !speaking) return;
+    stopSpeak();
+    const u=new SpeechSynthesisUtterance(text);
+    if(ruVoice) u.voice=ruVoice;
+    u.lang="ru-RU"; u.rate=0.7;
+    u.onend=()=>{ if(speaking && !isMobile) loopTimer=setTimeout(()=>speakLoop(text), 1200); };
+    speechSynthesis.speak(u);
+  }
+
+  // ============== 工具 ==============
+  function splitToken(w){
+    const lead = (w.match(/^[\(\[\{«"“]+/)||[""])[0];
+    const trail = (w.match(/[\.\,\!\?\;\:\—–…»"”\)\]\}]+$/)||[""])[0];
+    const core = w.slice(lead.length, w.length - trail.length);
+    return {lead, core, trail};
+  }
+  function normalize(s){ return (s||"").toLowerCase().replace(/[.,!?;:—–…«»"()]/g,""); }
+  function recomputePageComplete(){
+    const inputs=document.querySelectorAll('#inputs input.word-input');
+    pageComplete=Array.from(inputs).every(i=>i.classList.contains('done'));
+  }
+  function saveInputs(){
+    const inputs=document.querySelectorAll('#inputs input.word-input');
+    const p=P[idx];
+    p.userInputs=Array.from(inputs).map(inp=>({
+      value: inp.value,
+      correct: inp.classList.contains('correct'),
+      wrong: inp.classList.contains('wrong'),
+      done: inp.classList.contains('done')
+    }));
+  }
+  function restoreInputs(){
+    const p=P[idx];
+    const all=document.querySelectorAll('#inputs input.word-input');
+    if(p.userInputs.length !== all.length){ return; }
+    p.userInputs.forEach((st,i)=>{
+      const inp=all[i];
+      inp.value=st.value||"";
+      ['correct','wrong','done'].forEach(c=> inp.classList.toggle(c, !!st[c]) );
+    });
+    recomputePageComplete();
+  }
+
+  function attachInputHandlers(inp, fullText){
+    inp.addEventListener('input', ()=>{
+      if(!audioUnlocked) audioUnlocked=true;
+      if(!isMobile && !speaking){ speaking=true; speakLoop(fullText); }
+    });
+    inp.addEventListener('keydown', (e)=>{
+      if(e.key===' ' || e.key==='Enter'){
+        e.preventDefault();
+        inp.classList.add('done');
+        const ok = normalize(inp.value)===normalize(inp.dataset.correct);
+        inp.classList.toggle('correct', ok);
+        inp.classList.toggle('wrong', !ok);
+        recomputePageComplete();
+        if(!pageComplete){
+          const all=Array.from(document.querySelectorAll('#inputs input.word-input'));
+          const i=all.indexOf(inp);
+          for(let j=i+1;j<all.length;j++){
+            if(!all[j].classList.contains('done')){ all[j].focus(); break; }
+          }
+        }
+        saveInputs();
+        return;
+      }
+      // Backspace 回到上一个“已确认”的输入框，并清除其状态
+      if(e.key==='Backspace' && (inp.selectionStart===0 && inp.selectionEnd===0 || inp.value==='')){
+        e.preventDefault();
+        const all=Array.from(document.querySelectorAll('#inputs input.word-input'));
+        const i=all.indexOf(inp);
+        for(let j=i-1;j>=0;j--){
+          if(all[j].classList.contains('done')){
+            all[j].classList.remove('done','correct','wrong');
+            all[j].focus();
+            break;
+          }
+        }
+      }
+    });
+  }
+
+  // ============== 渲染 ==============
+  function renderPage(){
+    stopSpeak();
+    showingAnswer=false; pageComplete=false;
+    document.getElementById('answer').style.display='none';
+
+    const p=P[idx];
+    document.getElementById('cn').textContent = "中文提示：" + p.cn;
+
+    const inputsDiv=document.getElementById('inputs'); inputsDiv.innerHTML="";
+    const tokens = p.ruClean.trim().split(/\s+/);
+
+    if(p.userInputs.length !== tokens.length){
+      p.userInputs = new Array(tokens.length).fill(null).map(()=>({value:"",correct:false,wrong:false,done:false}));
+    }
+
+    tokens.forEach((w)=>{
+      const {lead, core, trail} = splitToken(w);
+      const block=document.createElement('div'); block.className='word-block';
+
+      if(lead){ const s=document.createElement('span'); s.className='punct'; s.textContent=lead; block.appendChild(s); }
+
+      const inp=document.createElement('input');
+      inp.type="text"; inp.className="word-input"; inp.dataset.correct=core;
+      const width = Math.min(Math.max(core.length*12 + 28, 160), 540);
+      inp.style.width = width + 'px';
+      attachInputHandlers(inp, p.ruStress);
+      block.appendChild(inp);
+
+      if(trail){ const t=document.createElement('span'); t.className='punct'; t.textContent=trail; block.appendChild(t); }
+
+      inputsDiv.appendChild(block);
+    });
+
+    restoreInputs();
+    document.getElementById('prevBtn').disabled = (idx===0);
+
+    if(!isMobile && audioUnlocked && speaking){ speakLoop(P[idx].ruStress); }
+    const firstNotDone = Array.from(document.querySelectorAll('#inputs input.word-input')).find(i=>!i.classList.contains('done')) || document.querySelector('#inputs input.word-input');
+    if(firstNotDone) firstNotDone.focus();
+  }
+
+  // ============== 答案 / 翻页 ==============
+  function showAnswer(){
+    const p=P[idx];
+    document.getElementById('ru').textContent  = p.ruStress;
+    document.getElementById('pos').textContent = p.pos||"";
+    document.getElementById('cnAnswer').textContent = p.cn||"";
+    document.getElementById('answer').style.display='block';
+    showingAnswer=true;
+  }
+  function nextPage(){
+    saveInputs();
+    if(idx===P.length-1){
+      stopSpeak();
+      document.getElementById('inputs').innerHTML="";
+      document.getElementById('cn').textContent="🎉 恭喜完成测试！";
+      document.getElementById('answer').style.display="none";
+      document.getElementById('speakBtn').style.display="none";
+      document.getElementById('nextBtn').style.display="none";
+      document.getElementById('prevBtn').style.display="none";
+    }else{
+      idx++; renderPage();
+    }
+  }
+  function prevPage(){
+    saveInputs();
+    if(idx>0){ idx--; renderPage(); }
+  }
+
+  // 全局：空格/回车控制答案/翻页
+  document.addEventListener('keydown',(e)=>{
+    if(e.key===' '||e.key==='Enter'){
+      if(!showingAnswer){
+        recomputePageComplete();
+        if(pageComplete){ e.preventDefault(); showAnswer(); }
+      }else{
+        e.preventDefault(); nextPage();
+      }
+    }
+  });
+
+  // 播放/暂停
+  document.getElementById('speakBtn').onclick=()=>{
+    if(!audioUnlocked){
+      audioUnlocked=true;
+      const init=new SpeechSynthesisUtterance("тест"); init.lang="ru-RU"; speechSynthesis.speak(init);
+    }
+    speaking=!speaking;
+    if(speaking) speakLoop(P[idx].ruStress); else stopSpeak();
+  };
+  document.getElementById('nextBtn').onclick=()=>{ if(!showingAnswer){ showAnswer(); } else { nextPage(); } };
+  document.getElementById('prevBtn').onclick=()=>{ prevPage(); };
+
+  // 启动
+  renderPage();
+  </script>
+</body>
+</html>
